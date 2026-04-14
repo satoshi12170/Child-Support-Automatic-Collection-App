@@ -1,0 +1,12 @@
+# 環境変数（認証情報を含むため必ずgit管理外にする）
+.env
+
+# データベース
+data/
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# 開発ツール設定
+.mcp.json

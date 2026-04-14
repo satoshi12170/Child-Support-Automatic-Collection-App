@@ -1,0 +1,31 @@
+{
+  "name": "child-support-automatic-collection-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/satoshi12170/Child-Support-Automatic-Collection-App.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/satoshi12170/Child-Support-Automatic-Collection-App/issues"
+  },
+  "homepage": "https://github.com/satoshi12170/Child-Support-Automatic-Collection-App#readme",
+  "dependencies": {
+    "@line/bot-sdk": "^11.0.0",
+    "better-sqlite3": "^12.9.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "node-cron": "^4.2.1",
+    "uuid": "^13.0.0"
+  }
+}
