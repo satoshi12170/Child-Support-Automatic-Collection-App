@@ -40,25 +40,34 @@ async function handlePaid(event, client) {
 
   paymentCycles.reportPaid(cycle.id);
 
-  // 受取人へプッシュ通知（クイックリプライ付き）
-  client.pushMessage({
-    to: pair.receiver_line_user_id,
-    messages: [{
-      type: 'text',
-      text: `📨 振込報告がありました\n\n${cycle.month}分の養育費（${pair.amount.toLocaleString()}円）の振込報告が届きました。\n\n入金を確認したら「受け取りました」と送信してください。`,
-      quickReply: {
-        items: [
-          { type: 'action', action: { type: 'message', label: '✅ 受け取りました', text: '受け取りました' } },
-          { type: 'action', action: { type: 'message', label: '📊 状況確認', text: '状況' } },
-        ],
-      },
-    }],
-  }).catch(err => console.error('[push] receiver paid-notify failed:', err));
-
-  return client.replyMessage(event.replyToken, {
+  // 義務者への受付完了メッセージ（replyTokenは30秒で失効するため先に送る）
+  const replyResult = await client.replyMessage(event.replyToken, {
     type: 'text',
     text: `✅ 振込報告を受け付けました\n\n${cycle.month}分（${pair.amount.toLocaleString()}円）\n\n受取人が確認すると通知が届きます。`,
   });
+
+  // 受取人へプッシュ通知（awaitして完了を待つ）
+  // DB更新は既に成功しているため、push失敗時もエラーを呼び出し元に伝播させない。
+  // [ALERT]ログで監視・対応できるようにする。
+  try {
+    await client.pushMessage({
+      to: pair.receiver_line_user_id,
+      messages: [{
+        type: 'text',
+        text: `📨 振込報告がありました\n\n${cycle.month}分の養育費（${pair.amount.toLocaleString()}円）の振込報告が届きました。\n\n入金を確認したら「受け取りました」と送信してください。`,
+        quickReply: {
+          items: [
+            { type: 'action', action: { type: 'message', label: '✅ 受け取りました', text: '受け取りました' } },
+            { type: 'action', action: { type: 'message', label: '📊 状況確認', text: '状況' } },
+          ],
+        },
+      }],
+    });
+  } catch (pushErr) {
+    console.error(`[ALERT] Failed to notify receiver of payment report | receiverId=${pair.receiver_line_user_id} payerId=${lineUserId} cycleId=${cycle.id} error=${pushErr.message}`);
+  }
+
+  return replyResult;
 }
 
 // ─── 受け取りました ────────────────────────────────────────────
@@ -90,19 +99,28 @@ async function handleReceived(event, client) {
 
   paymentCycles.confirmReceived(cycle.id);
 
-  // 義務者へプッシュ通知
-  client.pushMessage({
-    to: pair.payer_line_user_id,
-    messages: [{
-      type: 'text',
-      text: `✅ 受取確認されました\n\n${cycle.month}分の養育費（${pair.amount.toLocaleString()}円）の受取が確認されました。`,
-    }],
-  }).catch(err => console.error('[push] payer confirm-notify failed:', err));
-
-  return client.replyMessage(event.replyToken, {
+  // 受取人への受付完了メッセージ（replyTokenは30秒で失効するため先に送る）
+  const replyResult = await client.replyMessage(event.replyToken, {
     type: 'text',
     text: `✅ 受取確認を記録しました\n\n${cycle.month}分（${pair.amount.toLocaleString()}円）\n\n義務者に通知しました。`,
   });
+
+  // 義務者へプッシュ通知（awaitして完了を待つ）
+  // DB更新は既に成功しているため、push失敗時もエラーを呼び出し元に伝播させない。
+  // [ALERT]ログで監視・対応できるようにする。
+  try {
+    await client.pushMessage({
+      to: pair.payer_line_user_id,
+      messages: [{
+        type: 'text',
+        text: `✅ 受取確認されました\n\n${cycle.month}分の養育費（${pair.amount.toLocaleString()}円）の受取が確認されました。`,
+      }],
+    });
+  } catch (pushErr) {
+    console.error(`[ALERT] Failed to notify payer of receipt confirmation | payerId=${pair.payer_line_user_id} receiverId=${lineUserId} cycleId=${cycle.id} error=${pushErr.message}`);
+  }
+
+  return replyResult;
 }
 
 // ─── 状況 ──────────────────────────────────────────────────────

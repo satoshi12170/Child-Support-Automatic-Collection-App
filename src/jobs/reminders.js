@@ -106,8 +106,14 @@ function getAllActiveCycles() {
 }
 
 async function push(lineUserId, text) {
-  return client.pushMessage({ to: lineUserId, messages: [{ type: 'text', text }] })
-    .catch(err => console.error(`[cron] push failed to ${lineUserId}:`, err.message));
+  // Cronリマインダのpush失敗は[ALERT]ログで監視・対応できるようにする。
+  // 個別送信の失敗が他ユーザーへの送信を止めないよう、ここでエラーは握るが
+  // 必ずログには残し、リトライや再送の根拠を保持する。
+  try {
+    await client.pushMessage({ to: lineUserId, messages: [{ type: 'text', text }] });
+  } catch (pushErr) {
+    console.error(`[ALERT] Cron push failed | recipientId=${lineUserId} error=${pushErr.message}`);
+  }
 }
 
 // ─── Cronジョブ登録 ──────────────────────────────────────────

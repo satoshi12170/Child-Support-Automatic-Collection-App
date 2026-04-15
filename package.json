@@ -30,6 +30,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "exceljs": "^4.4.0",
     "jest": "^30.3.0"
   },
   "jest": {
