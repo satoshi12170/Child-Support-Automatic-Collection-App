@@ -6,7 +6,8 @@ const schema = `
     line_user_id TEXT UNIQUE NOT NULL,
     role TEXT CHECK(role IN ('receiver', 'payer')) NOT NULL,
     name TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    deactivated_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS invite_codes (
