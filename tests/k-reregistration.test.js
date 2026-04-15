@@ -223,15 +223,62 @@ describe('K-2: 再 follow → 再登録', () => {
     expect(activePair.amount).toBe(30000);
   });
 
-  test('K-2-05: アクティブユーザー（未ブロック）の再 follow → 「おかえりなさい」', async () => {
+  test('K-2-05: ペア確立済みユーザーの再 follow → 「おかえりなさい」', async () => {
     const { handleFollow } = require('../src/handlers/follow');
-    const { createReceiver } = require('./helpers');
-    createReceiver(db, 'U_still_active');
+    createPair(db, { receiverLineId: 'U_still_active', payerLineId: 'U_still_active_partner' });
 
     await handleFollow(makeFollowEvent('U_still_active'), client);
 
     const text = client.getLastReplyText();
     expect(text).toContain('おかえりなさい');
+  });
+
+  test('K-2-06: ペアリング未完了で再 follow → unfollow未配信でも再登録フローに入る', async () => {
+    // 実機再現シナリオ：受取人が招待コードを発行したがペアリング前にブロック、
+    // LINE から unfollow イベントが届かず users.deactivated_at が NULL のまま
+    // 再 follow が来た場合でも、強制的にリセットして役割選択に進めること。
+    const { handleFollow } = require('../src/handlers/follow');
+    const { createReceiver } = require('./helpers');
+    const inviteCodes = require('../src/db/inviteCodes');
+    const receiver = createReceiver(db, 'U_orphan_recv');
+    inviteCodes.create(receiver.id, 50000, 25);
+
+    await handleFollow(makeFollowEvent('U_orphan_recv'), client);
+
+    const text = client.getLastReplyText();
+    expect(text).not.toContain('おかえりなさい');
+    expect(text).toContain('受取人');
+    expect(text).toContain('支払い義務者');
+
+    // 孤立した招待コードは使用済みに回収されている
+    const orphanCodes = db.prepare(
+      'SELECT * FROM invite_codes WHERE receiver_id = ? AND used_at IS NULL'
+    ).all(receiver.id);
+    expect(orphanCodes).toHaveLength(0);
+
+    // 会話状態が onboarding_role になっている
+    const conversationStates = require('../src/db/conversationStates');
+    expect(conversationStates.get('U_orphan_recv').state).toBe('onboarding_role');
+  });
+
+  test('K-2-07: ペアリング未完了の受取人がテキスト送信 → 再登録誘導', async () => {
+    // 実機再現シナリオ：unfollow未配信で users は active のまま、
+    // ユーザーが「振込みました」等を送ったケース。従来は NoCycleError で行き詰まっていた。
+    process.env.LINE_CHANNEL_SECRET = 'test-secret';
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = 'test-token';
+    const { createReceiver } = require('./helpers');
+    createReceiver(db, 'U_orphan_text');
+
+    const { handleTextMessage } = require('../src/routes/webhook');
+    await handleTextMessage(makeTextEvent('U_orphan_text', '振込みました'), client);
+
+    const text = client.getLastReplyText();
+    expect(text).toContain('ペアリングが完了していない');
+    expect(text).toContain('受取人');
+
+    // 会話状態が onboarding_role にセットされている
+    const conversationStates = require('../src/db/conversationStates');
+    expect(conversationStates.get('U_orphan_text').state).toBe('onboarding_role');
   });
 });
 
