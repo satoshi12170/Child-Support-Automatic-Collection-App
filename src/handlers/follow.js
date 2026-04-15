@@ -32,29 +32,56 @@ LINEだけでシンプルに行えます。
   },
 };
 
+// ─── 共通クリーンアップ ────────────────────────────────────────
+
+// unfollow時 / follow時の「再登録が必要」判定時に呼ぶ共通処理。
+// ペアを ended に、招待コードを無効化、ユーザーを deactivate、会話状態をリセット。
+// トランザクションで一気に掃除して中途半端な状態を残さない。
+function runCleanup(user, lineUserId) {
+  const tx = db.transaction(() => {
+    if (user) {
+      pairs.endByUserId(user.id);
+      if (user.role === 'receiver') {
+        inviteCodes.invalidateByReceiverId(user.id);
+      }
+      users.deactivateByLineUserId(lineUserId);
+    }
+    conversationStates.reset(lineUserId);
+  });
+  tx();
+}
+
 // ─── follow: 友だち追加／ブロック解除後の再追加 ─────────────────
 
 async function handleFollow(event, client) {
   const lineUserId = event.source.userId;
 
-  // アクティブな既存ユーザー（ブロック経験なし or 再登録済み）
+  // アクティブな既存ユーザー
   const activeUser = users.getByLineUserId(lineUserId);
   if (activeUser) {
-    return client.replyMessage(event.replyToken, {
-      type: 'text',
-      text: 'おかえりなさい！\n\n「振込みました」「受け取りました」「状況」「履歴」のコマンドをご利用ください。',
-      quickReply: {
-        items: [
-          { type: 'action', action: { type: 'message', label: '状況', text: '状況' } },
-          { type: 'action', action: { type: 'message', label: '履歴', text: '履歴' } },
-        ],
-      },
-    });
+    // 相方とのアクティブペアがあれば通常の復帰
+    const activePair = pairs.findByUserId(activeUser.id);
+    if (activePair) {
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: 'おかえりなさい！\n\n「振込みました」「受け取りました」「状況」「履歴」のコマンドをご利用ください。',
+        quickReply: {
+          items: [
+            { type: 'action', action: { type: 'message', label: '状況', text: '状況' } },
+            { type: 'action', action: { type: 'message', label: '履歴', text: '履歴' } },
+          ],
+        },
+      });
+    }
+
+    // アクティブだがアクティブペアを持たない = ペアリング未完了でブロックされた等、
+    // unfollow イベントが届かず孤立したレコードが残っているケース。
+    // 強制的にクリーンアップして再登録フローに入れる。
+    console.log(`[event] follow with orphaned active user, running recovery cleanup | userId=${lineUserId}`);
+    runCleanup(activeUser, lineUserId);
   }
 
-  // 未登録、または過去にブロックされ deactivated 状態のユーザー
-  // → 会話状態をリセットしてオンボーディングをやり直す
-  //   deactivated レコード自体は残し、users.create 時に UPDATE で再アクティベートする
+  // 未登録、または deactivated、または孤立状態のユーザー → オンボーディング
   conversationStates.set(lineUserId, 'onboarding_role', {});
 
   return client.replyMessage(event.replyToken, WELCOME_MESSAGE);
@@ -64,31 +91,14 @@ async function handleFollow(event, client) {
 
 // replyToken が使えない（unfollow はサイレント）ため push もしない。
 // DB クリーンアップのみを行い、次の follow で再登録可能な状態にする。
+// なお LINE は unfollow を確実には配信しないため、handleFollow 側でも
+// 同等のリカバリ処理を行っている（多重実行しても冪等）。
 async function handleUnfollow(event /* , client */) {
   const lineUserId = event.source.userId;
   const anyUser = users.findAnyByLineUserId(lineUserId);
-  if (!anyUser) {
-    // 未登録のまま block された場合は会話状態のみ掃除
-    conversationStates.reset(lineUserId);
-    return;
-  }
-
-  // トランザクションで一気に soft-delete。部分更新を避け整合性を担保する。
-  const tx = db.transaction(() => {
-    // ペアを ended に。相手側も同じ pair を共有しているため自動的に無効化される。
-    pairs.endByUserId(anyUser.id);
-    // 受取人の場合、発行済み招待コードを無効化
-    if (anyUser.role === 'receiver') {
-      inviteCodes.invalidateByReceiverId(anyUser.id);
-    }
-    // ユーザーを deactivated に（再 follow 時に新規オンボーディング扱い）
-    users.deactivateByLineUserId(lineUserId);
-    // 会話状態をクリア
-    conversationStates.reset(lineUserId);
-  });
-  tx();
-
-  console.log(`[event] unfollow cleanup done | userId=${lineUserId} role=${anyUser.role}`);
+  runCleanup(anyUser, lineUserId);
+  const role = anyUser ? anyUser.role : 'unknown';
+  console.log(`[event] unfollow cleanup done | userId=${lineUserId} role=${role}`);
 }
 
 module.exports = { handleFollow, handleUnfollow };

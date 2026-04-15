@@ -7,6 +7,7 @@ const { handleOnboarding } = require('../handlers/onboarding');
 const { handlePaid, handleReceived, handleStatus, handleHistory } = require('../handlers/payment');
 const conversationStates = require('../db/conversationStates');
 const users = require('../db/users');
+const pairs = require('../db/pairs');
 const {
   DatabaseError,
   LINE_ERROR_MESSAGES,
@@ -153,6 +154,18 @@ async function handleTextMessage(event, client) {
     });
   }
 
+  // 登録済みだがアクティブペアを持たない = ペアリング未完了のまま放置された孤立状態。
+  // コマンドを実行してもサイクルが無くエラーになるだけなので、再登録へ誘導する。
+  const activePair = pairs.findByUserId(user.id);
+  if (!activePair) {
+    console.log(`[event] text from orphaned user, routing to re-onboarding | userId=${lineUserId}`);
+    conversationStates.set(lineUserId, 'onboarding_role', {});
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: 'ペアリングが完了していないようです。最初からやり直しましょう。\n\n1️⃣ 受取人（養育費を受け取る側）\n2️⃣ 支払い義務者（養育費を支払う側）\n\n「1」または「2」と送信してください。',
+    });
+  }
+
   // 登録済みユーザー向けコマンド
   const text = event.message.text.trim();
   if (text === '振込みました') return handlePaid(event, client);
@@ -166,4 +179,4 @@ async function handleTextMessage(event, client) {
   });
 }
 
-module.exports = { router, client };
+module.exports = { router, client, handleTextMessage };

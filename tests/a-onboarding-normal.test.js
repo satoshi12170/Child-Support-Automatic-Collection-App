@@ -324,10 +324,12 @@ describe('A-3: オンボーディング共通', () => {
     expect(state.state).toBe('onboarding_role');
   });
 
-  test('A-3-02: 登録済みユーザーの友だち追加 → 復帰メッセージ', async () => {
+  test('A-3-02: ペア確立済みユーザーの友だち追加 → 復帰メッセージ', async () => {
     const { handleFollow } = require('../src/handlers/follow');
-    const { createReceiver } = require('./helpers');
-    createReceiver(db, 'U_returning');
+    const { createPair } = require('./helpers');
+    // ペアまで確立したユーザーが再度友だち追加した場合のみ「おかえりなさい」となる仕様。
+    // ペア未確立で follow イベントが発生した場合は再登録フローへ誘導される。
+    createPair(db, { receiverLineId: 'U_returning', payerLineId: 'U_partner' });
 
     const event = makeFollowEvent('U_returning');
     await handleFollow(event, client);
