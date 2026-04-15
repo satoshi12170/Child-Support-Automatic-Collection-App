@@ -53,35 +53,20 @@ function runCleanup(user, lineUserId) {
 
 // ─── follow: 友だち追加／ブロック解除後の再追加 ─────────────────
 
+// LINE の follow イベントは「初回追加」または「ブロック解除後の再追加」でしか
+// 発生しない。後者の場合は unfollow イベントが届いていないケースも多く、
+// ペアリング状態にかかわらず一律で登録をやり直す仕様とする。
+// 既存レコードがあれば runCleanup で後始末して from-scratch のオンボーディングへ。
 async function handleFollow(event, client) {
   const lineUserId = event.source.userId;
 
-  // アクティブな既存ユーザー
-  const activeUser = users.getByLineUserId(lineUserId);
-  if (activeUser) {
-    // 相方とのアクティブペアがあれば通常の復帰
-    const activePair = pairs.findByUserId(activeUser.id);
-    if (activePair) {
-      return client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: 'おかえりなさい！\n\n「振込みました」「受け取りました」「状況」「履歴」のコマンドをご利用ください。',
-        quickReply: {
-          items: [
-            { type: 'action', action: { type: 'message', label: '状況', text: '状況' } },
-            { type: 'action', action: { type: 'message', label: '履歴', text: '履歴' } },
-          ],
-        },
-      });
-    }
-
-    // アクティブだがアクティブペアを持たない = ペアリング未完了でブロックされた等、
-    // unfollow イベントが届かず孤立したレコードが残っているケース。
-    // 強制的にクリーンアップして再登録フローに入れる。
-    console.log(`[event] follow with orphaned active user, running recovery cleanup | userId=${lineUserId}`);
-    runCleanup(activeUser, lineUserId);
+  const anyUser = users.findAnyByLineUserId(lineUserId);
+  if (anyUser) {
+    console.log(`[event] follow after existing registration, resetting for re-onboarding | userId=${lineUserId} role=${anyUser.role}`);
   }
-
-  // 未登録、または deactivated、または孤立状態のユーザー → オンボーディング
+  // ユーザー有無にかかわらず会話状態を初期化。既存ユーザーの場合は
+  // runCleanup でペア end / 招待コード無効化 / deactivate を行う。
+  runCleanup(anyUser, lineUserId);
   conversationStates.set(lineUserId, 'onboarding_role', {});
 
   return client.replyMessage(event.replyToken, WELCOME_MESSAGE);

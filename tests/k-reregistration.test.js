@@ -223,14 +223,33 @@ describe('K-2: 再 follow → 再登録', () => {
     expect(activePair.amount).toBe(30000);
   });
 
-  test('K-2-05: ペア確立済みユーザーの再 follow → 「おかえりなさい」', async () => {
+  test('K-2-05: ペア確立済みユーザーの再 follow → ペア解消して再登録フロー', async () => {
+    // 仕様：follow イベントはブロック解除後の再追加でしか発生しない。
+    // したがってペアリング完了状態でも、再追加時は一律で再登録させる。
     const { handleFollow } = require('../src/handlers/follow');
-    createPair(db, { receiverLineId: 'U_still_active', payerLineId: 'U_still_active_partner' });
+    const { pairId } = createPair(db, {
+      receiverLineId: 'U_still_active',
+      payerLineId: 'U_still_active_partner',
+    });
 
     await handleFollow(makeFollowEvent('U_still_active'), client);
 
     const text = client.getLastReplyText();
-    expect(text).toContain('おかえりなさい');
+    expect(text).not.toContain('おかえりなさい');
+    expect(text).toContain('受取人');
+    expect(text).toContain('支払い義務者');
+
+    // 旧ペアは ended に、自分は deactivated になっている
+    const pairRow = db.prepare('SELECT * FROM pairs WHERE id = ?').get(pairId);
+    expect(pairRow.status).toBe('ended');
+    const userRow = db.prepare(
+      'SELECT * FROM users WHERE line_user_id = ?'
+    ).get('U_still_active');
+    expect(userRow.deactivated_at).not.toBeNull();
+
+    // 会話状態は onboarding_role
+    const conversationStates = require('../src/db/conversationStates');
+    expect(conversationStates.get('U_still_active').state).toBe('onboarding_role');
   });
 
   test('K-2-06: ペアリング未完了で再 follow → unfollow未配信でも再登録フローに入る', async () => {

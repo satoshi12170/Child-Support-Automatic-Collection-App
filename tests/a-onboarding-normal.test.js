@@ -324,18 +324,20 @@ describe('A-3: オンボーディング共通', () => {
     expect(state.state).toBe('onboarding_role');
   });
 
-  test('A-3-02: ペア確立済みユーザーの友だち追加 → 復帰メッセージ', async () => {
+  test('A-3-02: 登録済みユーザーの再追加 → ペアリング状態にかかわらず再登録フロー', async () => {
     const { handleFollow } = require('../src/handlers/follow');
     const { createPair } = require('./helpers');
-    // ペアまで確立したユーザーが再度友だち追加した場合のみ「おかえりなさい」となる仕様。
-    // ペア未確立で follow イベントが発生した場合は再登録フローへ誘導される。
+    // follow イベントはブロック解除後の再追加でしか発生しないため、
+    // ペア確立済みであっても登録をやり直す仕様とする。
     createPair(db, { receiverLineId: 'U_returning', payerLineId: 'U_partner' });
 
     const event = makeFollowEvent('U_returning');
     await handleFollow(event, client);
 
     const text = client.getLastReplyText();
-    expect(text).toContain('おかえりなさい');
+    expect(text).toContain('受取人');
+    expect(text).toContain('支払い義務者');
+    expect(text).not.toContain('おかえりなさい');
   });
 
   test('A-3-03: 未登録ユーザーのコマンド → オンボーディング誘導', async () => {
