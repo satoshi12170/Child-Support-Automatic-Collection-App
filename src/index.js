@@ -6,6 +6,7 @@ const express = require('express');
 const { router: webhookRouter, client } = require('./routes/webhook');
 const { startJobs } = require('./jobs/reminders');
 const { setupRichMenus } = require('./line/richMenu');
+const { logger } = require('./utils/logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,8 +20,7 @@ app.get('/health', (req, res) => {
 app.use('/webhook', webhookRouter);
 
 app.listen(PORT, () => {
-  console.log(`[server] listening on port ${PORT}`);
-  console.log(`[server] webhook endpoint: POST /webhook`);
+  logger.info('Server started', { port: PORT, webhook: 'POST /webhook' });
   startJobs();
   setupRichMenus(client);
 });

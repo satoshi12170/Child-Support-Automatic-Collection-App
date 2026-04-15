@@ -5,6 +5,7 @@ const users = require('../db/users');
 const pairs = require('../db/pairs');
 const inviteCodes = require('../db/inviteCodes');
 const conversationStates = require('../db/conversationStates');
+const { logOperation } = require('../utils/logger');
 
 const WELCOME_MESSAGE = {
   type: 'text',
@@ -62,7 +63,7 @@ async function handleFollow(event, client) {
 
   const anyUser = users.findAnyByLineUserId(lineUserId);
   if (anyUser) {
-    console.log(`[event] follow after existing registration, resetting for re-onboarding | userId=${lineUserId} role=${anyUser.role}`);
+    logOperation('user.follow.re-registration', { userId: lineUserId, role: anyUser.role });
   }
   // ユーザー有無にかかわらず会話状態を初期化。既存ユーザーの場合は
   // runCleanup でペア end / 招待コード無効化 / deactivate を行う。
@@ -83,7 +84,7 @@ async function handleUnfollow(event /* , client */) {
   const anyUser = users.findAnyByLineUserId(lineUserId);
   runCleanup(anyUser, lineUserId);
   const role = anyUser ? anyUser.role : 'unknown';
-  console.log(`[event] unfollow cleanup done | userId=${lineUserId} role=${role}`);
+  logOperation('user.unfollow', { userId: lineUserId, role });
 }
 
 module.exports = { handleFollow, handleUnfollow };

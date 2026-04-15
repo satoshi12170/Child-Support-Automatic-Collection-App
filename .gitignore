@@ -8,6 +8,9 @@ data/
 node_modules/
 npm-debug.log*
 
+# ログ
+logs/
+
 # 開発ツール設定
 .mcp.json
 

@@ -12,6 +12,7 @@ const {
   DatabaseError,
   LINE_ERROR_MESSAGES,
 } = require('../utils/errors');
+const { logOperation, logError, logSecurity } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -69,12 +70,12 @@ router.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
     (err.message && /signature/i.test(err.message));
 
   if (isSignatureError) {
-    console.error(`[security] Signature validation failed | ip=${req.ip} ua=${req.headers['user-agent']}`);
+    logSecurity('Signature validation failed', { ip: req.ip, ua: req.headers['user-agent'] });
     return res.status(400).json({ error: 'invalid signature' });
   }
 
   // その他の予期せぬミドルウェアエラー
-  console.error('[webhook] unexpected middleware error:', err);
+  logError('webhook.middleware', err);
   res.status(500).json({ error: 'internal server error' });
 });
 
@@ -82,11 +83,11 @@ router.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
 
 async function handleEvent(event) {
   const lineUserId = event.source?.userId;
-  console.log(`[event] type=${event.type} userId=${lineUserId}`);
 
   try {
     switch (event.type) {
       case 'follow':
+        logOperation('user.follow', { userId: lineUserId });
         return await handleFollow(event, client);
 
       case 'unfollow':
@@ -94,6 +95,7 @@ async function handleEvent(event) {
 
       case 'message':
         if (event.message.type === 'text') {
+          logOperation('message.text', { userId: lineUserId });
           return await handleTextMessage(event, client);
         }
         break;
@@ -114,21 +116,20 @@ async function handleEventError(err, event, lineUserId) {
     err = new DatabaseError(err.message);
   }
 
-  const errType = err.name || 'UnknownError';
-  console.error(`[error] type=${errType} userId=${lineUserId} message=${err.message}`);
+  logError('event', err, { userId: lineUserId });
 
   // DBエラーはアラートとして強調ログ
   if (err instanceof DatabaseError) {
-    console.error('[ALERT] Database error - manual investigation required:', err.stack);
+    logError('event.database.ALERT', err, { userId: lineUserId, alert: true });
   }
 
   // ユーザー向けメッセージが定義されているエラー種別はLINE返答
-  const userMsg = LINE_ERROR_MESSAGES[errType];
+  const userMsg = LINE_ERROR_MESSAGES[err.name || 'UnknownError'];
   if (userMsg && event.replyToken) {
     try {
       await client.replyMessage(event.replyToken, { type: 'text', text: userMsg });
     } catch (replyErr) {
-      console.error('[error] Failed to send error reply:', replyErr.message);
+      logError('event.replyMessage', replyErr, { userId: lineUserId });
     }
   }
 }
@@ -158,7 +159,7 @@ async function handleTextMessage(event, client) {
   // コマンドを実行してもサイクルが無くエラーになるだけなので、再登録へ誘導する。
   const activePair = pairs.findByUserId(user.id);
   if (!activePair) {
-    console.log(`[event] text from orphaned user, routing to re-onboarding | userId=${lineUserId}`);
+    logOperation('user.orphaned.re-onboarding', { userId: lineUserId });
     conversationStates.set(lineUserId, 'onboarding_role', {});
     return client.replyMessage(event.replyToken, {
       type: 'text',

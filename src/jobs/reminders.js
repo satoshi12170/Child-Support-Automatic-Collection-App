@@ -3,6 +3,7 @@
 const cron = require('node-cron');
 const paymentCycles = require('../db/paymentCycles');
 const { client } = require('../routes/webhook');
+const { logOperation, logError, logger } = require('../utils/logger');
 
 // ─── 通知文言 ─────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ function addDays(dateStr, n) {
 
 async function runDailyReminders() {
   const todayStr = today();
-  console.log(`[cron] running daily reminders for ${todayStr}`);
+  logOperation('cron.daily.start', { date: todayStr });
 
   const cycles = await getAllActiveCycles();
 
@@ -64,6 +65,7 @@ async function runDailyReminders() {
 
     // 期日翌日（未払い）→ overdue に遷移
     if (addDays(due_date, 1) === todayStr && status === 'pending') {
+      logOperation('cycle.overdue', { cycleId: cycle.id, dueDate: due_date });
       paymentCycles.markOverdue(cycle.id);
       await push(payer_line_user_id, MESSAGES.alertDayAfterPayer(amount, due_date));
       await push(receiver_line_user_id, MESSAGES.alertDayAfterReceiver(amount, due_date));
@@ -78,14 +80,14 @@ async function runDailyReminders() {
     }
   }
 
-  console.log(`[cron] reminders done: ${sent} message(s) sent`);
+  logOperation('cron.daily.done', { date: todayStr, sent });
 }
 
 async function runMonthlyGeneration() {
   const now = new Date();
   const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const count = paymentCycles.generateMonthlyForAllPairs(month);
-  console.log(`[cron] monthly generation: ${count} pair(s) processed for ${month}`);
+  logOperation('cron.monthly.done', { month, pairs: count });
 }
 
 // ─── ヘルパー ─────────────────────────────────────────────────
@@ -112,7 +114,7 @@ async function push(lineUserId, text) {
   try {
     await client.pushMessage({ to: lineUserId, messages: [{ type: 'text', text }] });
   } catch (pushErr) {
-    console.error(`[ALERT] Cron push failed | recipientId=${lineUserId} error=${pushErr.message}`);
+    logError('cron.push.ALERT', pushErr, { userId: lineUserId });
   }
 }
 
@@ -125,7 +127,7 @@ function startJobs() {
   // 毎月1日 00:05 に翌月サイクル生成
   cron.schedule('5 0 1 * *', runMonthlyGeneration, { timezone: 'Asia/Tokyo' });
 
-  console.log('[cron] jobs registered: daily reminders (08:00 JST), monthly generation (1st 00:05 JST)');
+  logger.info('Cron jobs registered', { dailyAt: '08:00 JST', monthlyAt: '1st 00:05 JST' });
 }
 
 module.exports = { startJobs, runDailyReminders, runMonthlyGeneration };

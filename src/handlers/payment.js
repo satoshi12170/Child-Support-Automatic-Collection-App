@@ -4,6 +4,7 @@ const users = require('../db/users');
 const pairs = require('../db/pairs');
 const paymentCycles = require('../db/paymentCycles');
 const { UnregisteredUserError, NoCycleError } = require('../utils/errors');
+const { logOperation, logError } = require('../utils/logger');
 
 const STATUS_LABEL = {
   pending: '⏳ 未払い',
@@ -39,6 +40,7 @@ async function handlePaid(event, client) {
   }
 
   paymentCycles.reportPaid(cycle.id);
+  logOperation('payment.reported', { userId: lineUserId, cycleId: cycle.id, month: cycle.month });
 
   // 義務者への受付完了メッセージ（replyTokenは30秒で失効するため先に送る）
   const replyResult = await client.replyMessage(event.replyToken, {
@@ -64,7 +66,7 @@ async function handlePaid(event, client) {
       }],
     });
   } catch (pushErr) {
-    console.error(`[ALERT] Failed to notify receiver of payment report | receiverId=${pair.receiver_line_user_id} payerId=${lineUserId} cycleId=${cycle.id} error=${pushErr.message}`);
+    logError('push.receiver.paid-notify.ALERT', pushErr, { userId: lineUserId, cycleId: cycle.id });
   }
 
   return replyResult;
@@ -98,6 +100,7 @@ async function handleReceived(event, client) {
   }
 
   paymentCycles.confirmReceived(cycle.id);
+  logOperation('payment.confirmed', { userId: lineUserId, cycleId: cycle.id, month: cycle.month });
 
   // 受取人への受付完了メッセージ（replyTokenは30秒で失効するため先に送る）
   const replyResult = await client.replyMessage(event.replyToken, {
@@ -117,7 +120,7 @@ async function handleReceived(event, client) {
       }],
     });
   } catch (pushErr) {
-    console.error(`[ALERT] Failed to notify payer of receipt confirmation | payerId=${pair.payer_line_user_id} receiverId=${lineUserId} cycleId=${cycle.id} error=${pushErr.message}`);
+    logError('push.payer.confirm-notify.ALERT', pushErr, { userId: lineUserId, cycleId: cycle.id });
   }
 
   return replyResult;

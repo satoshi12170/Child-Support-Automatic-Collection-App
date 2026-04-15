@@ -2,6 +2,7 @@
 
 const line = require('@line/bot-sdk');
 const { generateDefaultMenuImage, generateReceiverMenuImage, generatePayerMenuImage } = require('./richMenuImage');
+const { logOperation, logError } = require('../utils/logger');
 
 // rich menu 画像アップロード専用クライアント（MessagingApiBlobClient）
 let blobClient = null;
@@ -79,14 +80,14 @@ async function setupRichMenus(client) {
       await getBlobClient().setRichMenuImage(richMenuId, blob);
 
       richMenuIds[menu.key] = richMenuId;
-      console.log(`[richMenu] created: ${menu.key} id=${richMenuId}`);
+      logOperation('richMenu.created', { key: menu.key, richMenuId });
     }
 
     // デフォルトメニューを全ユーザーに適用
     await client.setDefaultRichMenu(richMenuIds.default);
-    console.log('[richMenu] default menu set');
+    logOperation('richMenu.defaultSet', { richMenuId: richMenuIds.default });
   } catch (err) {
-    console.error('[richMenu] setup failed:', err.message);
+    logError('richMenu.setup', err);
   }
 }
 
@@ -100,9 +101,9 @@ async function setUserRichMenu(client, lineUserId, role) {
   if (!menuId) return; // セットアップ未完了の場合はスキップ
   try {
     await client.linkRichMenuIdToUser(lineUserId, menuId);
-    console.log(`[richMenu] linked: userId=${lineUserId} role=${role} menuId=${menuId}`);
+    logOperation('richMenu.linked', { userId: lineUserId, role, menuId });
   } catch (err) {
-    console.error(`[richMenu] link failed for ${lineUserId}:`, err.message);
+    logError('richMenu.link', err, { userId: lineUserId });
   }
 }
 

@@ -6,6 +6,7 @@ const inviteCodes = require('../db/inviteCodes');
 const pairs = require('../db/pairs');
 const { InvalidInviteCodeError } = require('../utils/errors');
 const { setUserRichMenu } = require('../line/richMenu');
+const { logOperation, logError } = require('../utils/logger');
 
 // ─── クイックリプライ定義 ─────────────────────────────────────
 
@@ -149,6 +150,7 @@ async function handleOnboardingConfirm(lineUserId, text, context, replyToken, cl
     const inv = inviteCodes.create(user.id, context.amount, context.dueDay);
     conversationStates.reset(lineUserId);
     setUserRichMenu(client, lineUserId, 'receiver');
+    logOperation('user.registered', { userId: lineUserId, role: 'receiver' });
 
     return client.replyMessage(replyToken, {
       type: 'text',
@@ -181,8 +183,11 @@ async function handleOnboardingConfirm(lineUserId, text, context, replyToken, cl
   try {
     await setUserRichMenu(client, lineUserId, 'payer');
   } catch (menuErr) {
-    console.error(`[ALERT] Failed to link rich menu | userId=${lineUserId} error=${menuErr.message}`);
+    logError('richMenu.link.ALERT', menuErr, { userId: lineUserId });
   }
+
+  logOperation('user.registered', { userId: lineUserId, role: 'payer' });
+  logOperation('pair.created', { userId: lineUserId });
 
   // 義務者への登録完了メッセージ（replyTokenは30秒で失効するため先に送る）
   const replyResult = await client.replyMessage(replyToken, {
@@ -202,7 +207,7 @@ async function handleOnboardingConfirm(lineUserId, text, context, replyToken, cl
       }],
     });
   } catch (pushErr) {
-    console.error(`[ALERT] Failed to notify receiver of pairing completion | receiverId=${inv.receiver_line_user_id} payerId=${lineUserId} error=${pushErr.message}`);
+    logError('push.receiver.pairing.ALERT', pushErr, { userId: lineUserId });
   }
 
   return replyResult;
