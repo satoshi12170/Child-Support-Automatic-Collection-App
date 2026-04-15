@@ -10,3 +10,6 @@ npm-debug.log*
 
 # 開発ツール設定
 .mcp.json
+
+# テスト実行の一時成果物
+tmp/
