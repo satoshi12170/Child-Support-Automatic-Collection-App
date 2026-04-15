@@ -292,7 +292,8 @@ describe('K-2: 再 follow → 再登録', () => {
     await handleTextMessage(makeTextEvent('U_orphan_text', '振込みました'), client);
 
     const text = client.getLastReplyText();
-    expect(text).toContain('ペアリングが完了していない');
+    // 孤立ユーザーも follow イベントと同じ WELCOME_MESSAGE を返す仕様
+    expect(text).toContain('ようこそ');
     expect(text).toContain('受取人');
 
     // 会話状態が onboarding_role にセットされている

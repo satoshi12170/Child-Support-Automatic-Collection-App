@@ -233,8 +233,9 @@ describe('A-2: 義務者オンボーディング（正常系）', () => {
     const pushError = new Error('LINE API: 500 Internal Server Error');
     client.pushMessage = jest.fn(() => Promise.reject(pushError));
 
-    // console.error をスパイ化して[ALERT]ログを捕捉
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    // logger.error をスパイ化して[ALERT]ログを捕捉（console.error → winston に移行済み）
+    const { logger } = require('../src/utils/logger');
+    const errorSpy = jest.spyOn(logger, 'error');
 
     try {
       // 名前入力
@@ -257,9 +258,9 @@ describe('A-2: 義務者オンボーディング（正常系）', () => {
       const pair = db.prepare("SELECT * FROM pairs WHERE status = 'active'").get();
       expect(pair).toBeDefined();
 
-      // ★ [ALERT]ログが出力されていること
+      // ★ [ALERT]ログが出力されていること（logError('push.receiver.pairing.ALERT', ...) 形式）
       const alertCall = errorSpy.mock.calls.find(args =>
-        typeof args[0] === 'string' && args[0].includes('[ALERT]') && args[0].includes('pairing completion')
+        typeof args[0] === 'string' && args[0].includes('pairing.ALERT')
       );
       expect(alertCall).toBeDefined();
       expect(alertCall[0]).toContain('LINE API');
