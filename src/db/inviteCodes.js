@@ -44,4 +44,15 @@ function markUsed(id) {
   `).run(id);
 }
 
-module.exports = { create, findValid, markUsed };
+// 指定 receiver の未使用招待コードを一括で無効化
+// （unfollow時、宙に浮いた招待コードを使えなくするためのクリーンアップ）
+function invalidateByReceiverId(receiverId) {
+  const result = db.prepare(`
+    UPDATE invite_codes
+    SET used_at = datetime('now')
+    WHERE receiver_id = ? AND used_at IS NULL
+  `).run(receiverId);
+  return result.changes;
+}
+
+module.exports = { create, findValid, markUsed, invalidateByReceiverId };

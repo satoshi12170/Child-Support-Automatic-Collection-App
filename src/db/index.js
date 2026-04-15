@@ -29,4 +29,12 @@ if (!hasAmount) {
   db.exec('ALTER TABLE invite_codes ADD COLUMN due_day INTEGER NOT NULL DEFAULT 1');
 }
 
+// マイグレーション: users に deactivated_at を追加
+// （ブロック→再追加後の再登録を可能にするためのsoft-deleteフラグ）
+const usersInfo = db.prepare('PRAGMA table_info(users)').all();
+const hasDeactivatedAt = usersInfo.some(col => col.name === 'deactivated_at');
+if (!hasDeactivatedAt) {
+  db.exec('ALTER TABLE users ADD COLUMN deactivated_at TEXT');
+}
+
 module.exports = db;

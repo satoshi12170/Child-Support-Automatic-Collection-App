@@ -87,6 +87,14 @@ function makeFollowEvent(userId = 'U_test_user') {
   };
 }
 
+function makeUnfollowEvent(userId = 'U_test_user') {
+  return {
+    type: 'unfollow',
+    source: { userId, type: 'user' },
+    timestamp: Date.now(),
+  };
+}
+
 function makeTextEvent(userId, text) {
   return {
     type: 'message',
@@ -172,6 +180,7 @@ module.exports = {
   teardownTestDb,
   createMockClient,
   makeFollowEvent,
+  makeUnfollowEvent,
   makeTextEvent,
   createReceiver,
   createPayer,

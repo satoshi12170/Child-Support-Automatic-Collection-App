@@ -2,7 +2,7 @@
 
 const express = require('express');
 const line = require('@line/bot-sdk');
-const { handleFollow } = require('../handlers/follow');
+const { handleFollow, handleUnfollow } = require('../handlers/follow');
 const { handleOnboarding } = require('../handlers/onboarding');
 const { handlePaid, handleReceived, handleStatus, handleHistory } = require('../handlers/payment');
 const conversationStates = require('../db/conversationStates');
@@ -87,6 +87,9 @@ async function handleEvent(event) {
     switch (event.type) {
       case 'follow':
         return await handleFollow(event, client);
+
+      case 'unfollow':
+        return await handleUnfollow(event, client);
 
       case 'message':
         if (event.message.type === 'text') {

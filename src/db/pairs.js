@@ -30,4 +30,15 @@ function findByUserId(userId) {
   `).get(userId, userId);
 }
 
-module.exports = { create, findByUserId };
+// 指定ユーザーが含まれるアクティブペアを ended に遷移
+// （unfollow時のクリーンアップに使用。両側の pair を含む）
+function endByUserId(userId) {
+  const result = db.prepare(`
+    UPDATE pairs
+    SET status = 'ended'
+    WHERE (receiver_id = ? OR payer_id = ?) AND status = 'active'
+  `).run(userId, userId);
+  return result.changes;
+}
+
+module.exports = { create, findByUserId, endByUserId };
