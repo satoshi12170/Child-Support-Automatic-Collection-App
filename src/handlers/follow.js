@@ -87,4 +87,4 @@ async function handleUnfollow(event /* , client */) {
   logOperation('user.unfollow', { userId: lineUserId, role });
 }
 
-module.exports = { handleFollow, handleUnfollow };
+module.exports = { handleFollow, handleUnfollow, WELCOME_MESSAGE, runCleanup };

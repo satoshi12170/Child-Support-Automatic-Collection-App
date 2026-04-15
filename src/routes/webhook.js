@@ -2,7 +2,7 @@
 
 const express = require('express');
 const line = require('@line/bot-sdk');
-const { handleFollow, handleUnfollow } = require('../handlers/follow');
+const { handleFollow, handleUnfollow, WELCOME_MESSAGE, runCleanup } = require('../handlers/follow');
 const { handleOnboarding } = require('../handlers/onboarding');
 const { handlePaid, handleReceived, handleStatus, handleHistory } = require('../handlers/payment');
 const conversationStates = require('../db/conversationStates');
@@ -145,26 +145,21 @@ async function handleTextMessage(event, client) {
     return handleOnboarding(event, client);
   }
 
-  // 未登録ユーザーはオンボーディングへ誘導
+  // 未登録ユーザー（初回 or ブロック後 follow イベントが未着）→ 最初のフローへ
   const user = users.getByLineUserId(lineUserId);
   if (!user) {
     conversationStates.set(lineUserId, 'onboarding_role', {});
-    return client.replyMessage(event.replyToken, {
-      type: 'text',
-      text: '最初に役割を選択してください。\n\n1️⃣ 受取人（養育費を受け取る側）\n2️⃣ 支払い義務者（養育費を支払う側）\n\n「1」または「2」と送信してください。',
-    });
+    return client.replyMessage(event.replyToken, WELCOME_MESSAGE);
   }
 
-  // 登録済みだがアクティブペアを持たない = ペアリング未完了のまま放置された孤立状態。
-  // コマンドを実行してもサイクルが無くエラーになるだけなので、再登録へ誘導する。
+  // 登録済みだがアクティブペアなし = 孤立状態（パートナーが離脱など）。
+  // クリーンアップして最初のフローへ（follow イベントと同じ挙動）。
   const activePair = pairs.findByUserId(user.id);
   if (!activePair) {
     logOperation('user.orphaned.re-onboarding', { userId: lineUserId });
+    runCleanup(user, lineUserId);
     conversationStates.set(lineUserId, 'onboarding_role', {});
-    return client.replyMessage(event.replyToken, {
-      type: 'text',
-      text: 'ペアリングが完了していないようです。最初からやり直しましょう。\n\n1️⃣ 受取人（養育費を受け取る側）\n2️⃣ 支払い義務者（養育費を支払う側）\n\n「1」または「2」と送信してください。',
-    });
+    return client.replyMessage(event.replyToken, WELCOME_MESSAGE);
   }
 
   // 登録済みユーザー向けコマンド
