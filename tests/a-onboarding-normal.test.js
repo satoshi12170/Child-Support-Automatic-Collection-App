@@ -206,6 +206,14 @@ describe('A-2: 義務者オンボーディング（正常系）', () => {
     const pushText = client.getLastPushText();
     expect(pushText).toContain('ペアリング完了');
 
+    // ★ 送信先が正しい受取人のLINE UserIDであること
+    const pushCall = client.pushes[0];
+    expect(pushCall.to).toBe(receiverUser.lineUserId);
+
+    // ★ メッセージに金額・期日が含まれていること
+    expect(pushText).toContain('50,000');
+    expect(pushText).toContain('25日');
+
     // DBにペアが作成されている
     const pair = db.prepare("SELECT * FROM pairs WHERE status = 'active'").get();
     expect(pair).toBeDefined();
@@ -215,6 +223,82 @@ describe('A-2: 義務者オンボーディング（正常系）', () => {
     // 招待コードが使用済みになっている
     const usedCode = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(inviteCode);
     expect(usedCode.used_at).not.toBeNull();
+  });
+
+  test('A-2-05: pushMessage失敗時 → DB更新は成功し[ALERT]ログが出力されること', async () => {
+    const { handleOnboarding } = require('../src/handlers/onboarding');
+    const conversationStates = require('../src/db/conversationStates');
+
+    // pushMessage がネットワークエラーで失敗するモックに差し替え
+    const pushError = new Error('LINE API: 500 Internal Server Error');
+    client.pushMessage = jest.fn(() => Promise.reject(pushError));
+
+    // console.error をスパイ化して[ALERT]ログを捕捉
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      // 名前入力
+      conversationStates.set('U_payer_fail', 'onboarding_name', { role: 'payer', inviteCode });
+      await handleOnboarding(makeTextEvent('U_payer_fail', '田中 次郎'), client);
+
+      // 確認「はい」
+      client.replies.length = 0;
+      const confirmEvent = makeTextEvent('U_payer_fail', 'はい');
+
+      // ★ 仕様：DB更新（ユーザー作成・ペアリング・招待コード使用済み）は既に成功しているため、
+      //   push失敗は呼び出し元に伝播させない。代わりに[ALERT]ログで監視する。
+      await expect(handleOnboarding(confirmEvent, client)).resolves.toBeDefined();
+
+      // ★ 義務者への reply は成功していること（replyToken失効前に送信済み）
+      const replyText = client.getLastReplyText();
+      expect(replyText).toContain('登録が完了');
+
+      // ★ ペアリングDBは正常に作成されていること
+      const pair = db.prepare("SELECT * FROM pairs WHERE status = 'active'").get();
+      expect(pair).toBeDefined();
+
+      // ★ [ALERT]ログが出力されていること
+      const alertCall = errorSpy.mock.calls.find(args =>
+        typeof args[0] === 'string' && args[0].includes('[ALERT]') && args[0].includes('pairing completion')
+      );
+      expect(alertCall).toBeDefined();
+      expect(alertCall[0]).toContain('LINE API');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  test('A-2-06: pushMessage が await されていること', async () => {
+    const { handleOnboarding } = require('../src/handlers/onboarding');
+    const conversationStates = require('../src/db/conversationStates');
+
+    // pushMessage の完了を追跡するフラグ
+    let pushCompleted = false;
+    client.pushMessage = jest.fn(() => {
+      // 非同期で遅延解決するPromise（実際のHTTP通信を模擬）
+      return new Promise(resolve => {
+        setImmediate(() => {
+          pushCompleted = true;
+          resolve({});
+        });
+      });
+    });
+
+    // 名前入力
+    conversationStates.set('U_payer_await', 'onboarding_name', { role: 'payer', inviteCode });
+    await handleOnboarding(makeTextEvent('U_payer_await', '佐藤 三郎'), client);
+
+    // 確認「はい」
+    client.replies.length = 0;
+    client.pushes = [];
+    const confirmEvent = makeTextEvent('U_payer_await', 'はい');
+    await handleOnboarding(confirmEvent, client);
+
+    // ★ handleOnboarding の await 完了後に pushMessage も完了しているべき
+    //   現実装では pushMessage が await されていないため、
+    //   handleOnboarding が resolve した時点で pushCompleted は false のまま
+    expect(client.pushMessage).toHaveBeenCalled();
+    expect(pushCompleted).toBe(true);
   });
 });
 

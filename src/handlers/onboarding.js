@@ -176,21 +176,36 @@ async function handleOnboardingConfirm(lineUserId, text, context, replyToken, cl
   });
   inviteCodes.markUsed(inv.id);
   conversationStates.reset(lineUserId);
-  setUserRichMenu(client, lineUserId, 'payer');
 
-  // 受取人へプッシュ通知
-  client.pushMessage({
-    to: inv.receiver_line_user_id,
-    messages: [{
-      type: 'text',
-      text: `✅ ペアリング完了！\n\n支払い義務者が登録を完了しました。\n\n━━━━━━━━━━━━━━━\n💰 毎月の養育費：${inv.amount.toLocaleString()}円\n📅 支払い期日：毎月${inv.due_day}日\n━━━━━━━━━━━━━━━\n\n支払い期日が近づくとリマインドが届きます。`,
-    }],
-  }).catch(err => console.error('[push] receiver notification failed:', err));
+  // リッチメニュー切替（失敗しても登録は成功済みのためログのみ）
+  try {
+    await setUserRichMenu(client, lineUserId, 'payer');
+  } catch (menuErr) {
+    console.error(`[ALERT] Failed to link rich menu | userId=${lineUserId} error=${menuErr.message}`);
+  }
 
-  return client.replyMessage(replyToken, {
+  // 義務者への登録完了メッセージ（replyTokenは30秒で失効するため先に送る）
+  const replyResult = await client.replyMessage(replyToken, {
     type: 'text',
     text: `登録が完了しました！\n\n━━━━━━━━━━━━━━━\n💰 毎月の養育費：${inv.amount.toLocaleString()}円\n📅 支払い期日：毎月${inv.due_day}日\n━━━━━━━━━━━━━━━\n\n支払い期日が近づくとリマインドが届きます。\n支払い後は「振込みました」と送信してください。`,
   });
+
+  // 受取人へプッシュ通知（awaitして完了を待つ）
+  // ペアリングDB更新は既に成功しているため、push失敗時もエラーを呼び出し元に
+  // 伝播させない。ただし[ALERT]ログで監視・対応できるようにする。
+  try {
+    await client.pushMessage({
+      to: inv.receiver_line_user_id,
+      messages: [{
+        type: 'text',
+        text: `✅ ペアリング完了！\n\n支払い義務者が登録を完了しました。\n\n━━━━━━━━━━━━━━━\n💰 毎月の養育費：${inv.amount.toLocaleString()}円\n📅 支払い期日：毎月${inv.due_day}日\n━━━━━━━━━━━━━━━\n\n支払い期日が近づくとリマインドが届きます。`,
+      }],
+    });
+  } catch (pushErr) {
+    console.error(`[ALERT] Failed to notify receiver of pairing completion | receiverId=${inv.receiver_line_user_id} payerId=${lineUserId} error=${pushErr.message}`);
+  }
+
+  return replyResult;
 }
 
 // ─── メインディスパッチャ ──────────────────────────────────────
