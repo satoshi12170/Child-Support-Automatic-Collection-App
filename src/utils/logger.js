@@ -58,11 +58,13 @@ const errorFileTransport = new winston.transports.DailyRotateFile({
   level: 'error',
 });
 
-const transports = [allFileTransport, errorFileTransport];
-
-if (process.env.NODE_ENV !== 'production') {
-  transports.push(new winston.transports.Console({ format: consoleFormat }));
-}
+// 本番環境でも stdout へ出力する（Railwayなどのクラウド環境でログを収集するため）
+// ファイルログは追加的に保存（コンテナ再起動で失われるが補助用途）
+const transports = [
+  new winston.transports.Console({ format: consoleFormat }),
+  allFileTransport,
+  errorFileTransport,
+];
 
 // ─── ロガー ───────────────────────────────────────────────────
 
