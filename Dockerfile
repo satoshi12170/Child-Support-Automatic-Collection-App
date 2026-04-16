@@ -17,6 +17,7 @@ RUN mkdir -p /data
 ENV DB_PATH=/data/app.db
 ENV NODE_ENV=production
 
-EXPOSE 3000
+# EXPOSE はRailwayがPORT環境変数で自動検出するため不要
+# （EXPOSEを残すとRailwayが誤ったポートにルーティングする場合がある）
 
 CMD ["node", "src/index.js"]
