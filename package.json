@@ -23,6 +23,7 @@
   "homepage": "https://github.com/satoshi12170/Child-Support-Automatic-Collection-App#readme",
   "dependencies": {
     "@line/bot-sdk": "^11.0.0",
+    "@napi-rs/canvas": "^0.1.98",
     "better-sqlite3": "^12.9.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
