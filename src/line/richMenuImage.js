@@ -27,8 +27,8 @@ for (const file of [
 const WIDTH       = 2500;
 const HEIGHT      = 843;
 const AREA_W      = 625;
-const FONT_SIZE   = 56;
-const LINE_HEIGHT = 78;
+const FONT_SIZE   = 84;
+const LINE_HEIGHT = 112;
 const FONT_SPEC   = `bold ${FONT_SIZE}px "Noto Sans JP", sans-serif`;
 const DIVIDER_CLR = 'rgb(180,180,180)';
 
