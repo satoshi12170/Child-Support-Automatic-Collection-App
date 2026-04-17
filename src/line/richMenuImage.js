@@ -1,46 +1,49 @@
 'use strict';
 
 const { createCanvas, GlobalFonts } = require('@napi-rs/canvas');
+const path = require('path');
 const fs = require('fs');
 
-// システムフォントをロード（Nixpacksでインストールされた日本語フォントを含む）
-GlobalFonts.loadSystemFonts();
+// ─── フォント登録 ─────────────────────────────────────────────
+// @fontsource/noto-sans-jp の日本語サブセット woff2 を読み込む。
+// システムフォントに依存しないため Railway 等のクラウド環境でも確実に動作する。
 
-// Nix store 配下のフォントディレクトリを明示的にスキャン
-// （fontconfigの自動検出で拾われない場合のフォールバック）
-const NIX_FONT_ROOTS = [
-  '/nix/var/nix/profiles/default/share/fonts',
-  '/run/current-system/sw/share/fonts',
-  '/usr/share/fonts',
-  '/usr/local/share/fonts',
-];
-for (const dir of NIX_FONT_ROOTS) {
-  if (fs.existsSync(dir)) {
-    GlobalFonts.loadFontsFromDir(dir);
+const FONTS_DIR = path.join(
+  __dirname, '../../node_modules/@fontsource/noto-sans-jp/files'
+);
+
+for (const file of [
+  'noto-sans-jp-japanese-400-normal.woff2',
+  'noto-sans-jp-japanese-700-normal.woff2',
+]) {
+  const full = path.join(FONTS_DIR, file);
+  if (fs.existsSync(full)) {
+    GlobalFonts.register(fs.readFileSync(full), 'Noto Sans JP');
   }
 }
 
 // ─── レイアウト定数 ───────────────────────────────────────────
 
-const WIDTH   = 2500;
-const HEIGHT  = 843;
-const AREA_W  = 625;
-const FONT_SIZE  = 56;
+const WIDTH       = 2500;
+const HEIGHT      = 843;
+const AREA_W      = 625;
+const FONT_SIZE   = 56;
 const LINE_HEIGHT = 78;
-const DIVIDER_COLOR = 'rgb(180,180,180)';
+const FONT_SPEC   = `bold ${FONT_SIZE}px "Noto Sans JP", sans-serif`;
+const DIVIDER_CLR = 'rgb(180,180,180)';
 
-// ─── 描画 ─────────────────────────────────────────────────────
+// ─── 描画ヘルパー ─────────────────────────────────────────────
 
 function renderSection(ctx, sec, x) {
   // 背景
   ctx.fillStyle = `rgb(${sec.r},${sec.g},${sec.b})`;
   ctx.fillRect(x, 0, sec.width, HEIGHT);
 
-  // テキスト（複数行対応）
+  // テキスト（複数行）
   if (sec.lines && sec.lines.length) {
     ctx.save();
     ctx.fillStyle    = sec.textColor || '#333333';
-    ctx.font         = `bold ${FONT_SIZE}px "Noto Sans CJK JP", "Noto Sans JP", sans-serif`;
+    ctx.font         = FONT_SPEC;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
 
@@ -62,9 +65,8 @@ function generateRichMenuPNG(sections) {
   let x = 0;
   sections.forEach((sec, i) => {
     renderSection(ctx, sec, x);
-    // セクション間の区切り線
     if (i > 0) {
-      ctx.fillStyle = DIVIDER_COLOR;
+      ctx.fillStyle = DIVIDER_CLR;
       ctx.fillRect(x, 0, 2, HEIGHT);
     }
     x += sec.width;

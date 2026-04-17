@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python3", "gcc", "gnumake", "noto-fonts-cjk-sans", "fontconfig"]
+nixPkgs = ["python3", "gcc", "gnumake"]
 
 [phases.install]
 cmds = ["npm ci --omit=dev", "npm rebuild better-sqlite3 --build-from-source"]
