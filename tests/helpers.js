@@ -32,6 +32,14 @@ function setupTestDb() {
     db.exec('ALTER TABLE invite_codes ADD COLUMN due_day INTEGER NOT NULL DEFAULT 1');
   }
 
+  // マイグレーション: users に Stripe カラムを追加（本番と同じ）
+  const usersInfo = db.prepare('PRAGMA table_info(users)').all();
+  const hasStripeCustomerId = usersInfo.some(col => col.name === 'stripe_customer_id');
+  if (!hasStripeCustomerId) {
+    db.exec('ALTER TABLE users ADD COLUMN stripe_customer_id TEXT');
+    db.exec('ALTER TABLE users ADD COLUMN stripe_payment_method_id TEXT');
+  }
+
   // jest.doMock で src/db/index を差し替え
   // 以降の require('../src/db/...') は全てこの db を使う
   jest.doMock('../src/db/index', () => db);

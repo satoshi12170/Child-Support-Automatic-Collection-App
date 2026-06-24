@@ -64,3 +64,5 @@ router.get('/cancel', (req, res) => {
 });
 
 module.exports = router;
+// テスト用にエクスポート（Webhook ハンドラの単体検証）
+module.exports.handleCheckoutCompleted = handleCheckoutCompleted;
