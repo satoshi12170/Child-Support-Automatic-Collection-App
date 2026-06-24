@@ -40,6 +40,14 @@ if (!hasDeactivatedAt) {
   logger.info('DB migration applied: users deactivated_at column added');
 }
 
+// マイグレーション: users に Stripe 決済情報カラムを追加
+const hasStripeCustomerId = usersInfo.some(col => col.name === 'stripe_customer_id');
+if (!hasStripeCustomerId) {
+  db.exec('ALTER TABLE users ADD COLUMN stripe_customer_id TEXT');
+  db.exec('ALTER TABLE users ADD COLUMN stripe_payment_method_id TEXT');
+  logger.info('DB migration applied: users stripe columns added');
+}
+
 logger.info('Database initialized', { path: DB_PATH });
 
 module.exports = db;

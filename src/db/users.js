@@ -60,4 +60,12 @@ function deactivateByLineUserId(lineUserId) {
   return result.changes > 0;
 }
 
-module.exports = { getByLineUserId, findAnyByLineUserId, create, deactivateByLineUserId };
+function saveStripeIds(lineUserId, stripeCustomerId, stripePaymentMethodId) {
+  db.prepare(`
+    UPDATE users
+    SET stripe_customer_id = ?, stripe_payment_method_id = ?
+    WHERE line_user_id = ? AND deactivated_at IS NULL
+  `).run(stripeCustomerId, stripePaymentMethodId, lineUserId);
+}
+
+module.exports = { getByLineUserId, findAnyByLineUserId, create, deactivateByLineUserId, saveStripeIds };
