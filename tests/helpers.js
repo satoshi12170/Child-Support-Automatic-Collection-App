@@ -183,6 +183,19 @@ function createCycle(db, pairId, month, dueDay, status = 'pending') {
   return { cycleId, month, dueDate, status };
 }
 
+/**
+ * 当月（resolveCurrentMonth が解決する月）のサイクルを作成する。
+ *
+ * ハンドラ（handlePaid 等）は getOrCreateCurrent で実日付から当月を解決するため、
+ * 固定月（'2026-04' 等）でサイクルを作るとハンドラが別の当月サイクルを新規生成し、
+ * テストが用意したサイクルに触れない。実行日に依存せず当月サイクルを用意する。
+ */
+function createCurrentCycle(db, pair, status = 'pending') {
+  const { resolveCurrentMonth } = require('../src/db/paymentCycles');
+  const month = resolveCurrentMonth(pair.dueDay);
+  return createCycle(db, pair.pairId, month, pair.dueDay, status);
+}
+
 module.exports = {
   setupTestDb,
   teardownTestDb,
@@ -194,4 +207,5 @@ module.exports = {
   createPayer,
   createPair,
   createCycle,
+  createCurrentCycle,
 };

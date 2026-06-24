@@ -7,7 +7,7 @@
 
 const {
   setupTestDb, teardownTestDb, createMockClient,
-  makeTextEvent, createPair, createCycle,
+  makeTextEvent, createPair, createCycle, createCurrentCycle,
 } = require('./helpers');
 
 let db, client;
@@ -27,7 +27,7 @@ describe('D-1: PaymentCycle 状態遷移', () => {
   test('D-1-01: pending → reported → confirmed（正常フロー）', async () => {
     const { handlePaid, handleReceived } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, 'pending');
+    createCurrentCycle(db, pair, 'pending');
 
     // 1. 義務者が報告
     const paidEvent = makeTextEvent(pair.payer.lineUserId, '振込みました');
@@ -61,7 +61,7 @@ describe('D-1: PaymentCycle 状態遷移', () => {
   test('D-1-03: overdue → reported → confirmed（遅延支払い回復）', async () => {
     const { handlePaid, handleReceived } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, 'overdue');
+    createCurrentCycle(db, pair, 'overdue');
 
     // 遅延報告
     const paidEvent = makeTextEvent(pair.payer.lineUserId, '振込みました');
