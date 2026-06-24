@@ -7,7 +7,7 @@
 
 const {
   setupTestDb, teardownTestDb, createMockClient,
-  makeFollowEvent, makeTextEvent, createPair, createCycle,
+  makeFollowEvent, makeTextEvent, createPair, createCycle, createCurrentCycle,
 } = require('./helpers');
 
 let db, client;
@@ -123,7 +123,7 @@ describe('J-03: 遅延支払い回復', () => {
   test('overdue → reported → confirmed', async () => {
     const { handlePaid, handleReceived } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, 'overdue');
+    createCurrentCycle(db, pair, 'overdue');
 
     // 遅延報告
     await handlePaid(makeTextEvent(pair.payer.lineUserId, '振込みました'), client);

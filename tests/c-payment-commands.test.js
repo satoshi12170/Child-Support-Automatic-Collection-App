@@ -7,7 +7,7 @@
 
 const {
   setupTestDb, teardownTestDb, createMockClient,
-  makeTextEvent, createPair, createCycle,
+  makeTextEvent, createPair, createCycle, createCurrentCycle,
 } = require('./helpers');
 
 let db, client;
@@ -27,7 +27,7 @@ describe('C-1: 振込みました（支払い報告）', () => {
   test('C-1-01: 正常報告（pending→reported）', async () => {
     const { handlePaid } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, 'pending');
+    createCurrentCycle(db, pair, 'pending');
 
     const event = makeTextEvent(pair.payer.lineUserId, '振込みました');
     await handlePaid(event, client);
@@ -51,7 +51,7 @@ describe('C-1: 振込みました（支払い報告）', () => {
   test('C-1-03: confirmed状態 → 「すでに確認済み」メッセージ', async () => {
     const { handlePaid } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, 'confirmed');
+    createCurrentCycle(db, pair, 'confirmed');
 
     const event = makeTextEvent(pair.payer.lineUserId, '振込みました');
     await handlePaid(event, client);
@@ -63,7 +63,7 @@ describe('C-1: 振込みました（支払い報告）', () => {
   test('C-1-04: 受取人が実行 → 「義務者のみ」メッセージ', async () => {
     const { handlePaid } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, 'pending');
+    createCurrentCycle(db, pair, 'pending');
 
     const event = makeTextEvent(pair.receiver.lineUserId, '振込みました');
     await handlePaid(event, client);
@@ -79,7 +79,7 @@ describe('C-2: 受け取りました（受取確認）', () => {
   test('C-2-01: 正常確認（reported→confirmed）', async () => {
     const { handleReceived } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, 'reported');
+    createCurrentCycle(db, pair, 'reported');
 
     const event = makeTextEvent(pair.receiver.lineUserId, '受け取りました');
     await handleReceived(event, client);
@@ -102,7 +102,7 @@ describe('C-2: 受け取りました（受取確認）', () => {
   test('C-2-02: pending状態で確認 → 「振込報告後に」メッセージ', async () => {
     const { handleReceived } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, 'pending');
+    createCurrentCycle(db, pair, 'pending');
 
     const event = makeTextEvent(pair.receiver.lineUserId, '受け取りました');
     await handleReceived(event, client);
@@ -114,7 +114,7 @@ describe('C-2: 受け取りました（受取確認）', () => {
   test('C-2-03: overdue状態で確認 → 「振込報告後に」メッセージ', async () => {
     const { handleReceived } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, 'overdue');
+    createCurrentCycle(db, pair, 'overdue');
 
     const event = makeTextEvent(pair.receiver.lineUserId, '受け取りました');
     await handleReceived(event, client);
@@ -126,7 +126,7 @@ describe('C-2: 受け取りました（受取確認）', () => {
   test('C-2-04: 義務者が実行 → 「受取人のみ」メッセージ', async () => {
     const { handleReceived } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, 'reported');
+    createCurrentCycle(db, pair, 'reported');
 
     const event = makeTextEvent(pair.payer.lineUserId, '受け取りました');
     await handleReceived(event, client);
@@ -147,7 +147,7 @@ describe('C-3: 状況確認', () => {
   ])('C-3: status=%s → ラベル「%s」が表示', async (status, expectedLabel) => {
     const { handleStatus } = require('../src/handlers/payment');
     const pair = createPair(db);
-    createCycle(db, pair.pairId, '2026-04', pair.dueDay, status);
+    createCurrentCycle(db, pair, status);
 
     const event = makeTextEvent(pair.receiver.lineUserId, '状況');
     await handleStatus(event, client);

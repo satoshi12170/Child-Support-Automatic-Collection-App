@@ -32,6 +32,14 @@ function setupTestDb() {
     db.exec('ALTER TABLE invite_codes ADD COLUMN due_day INTEGER NOT NULL DEFAULT 1');
   }
 
+  // マイグレーション: users に Stripe カラムを追加（本番と同じ）
+  const usersInfo = db.prepare('PRAGMA table_info(users)').all();
+  const hasStripeCustomerId = usersInfo.some(col => col.name === 'stripe_customer_id');
+  if (!hasStripeCustomerId) {
+    db.exec('ALTER TABLE users ADD COLUMN stripe_customer_id TEXT');
+    db.exec('ALTER TABLE users ADD COLUMN stripe_payment_method_id TEXT');
+  }
+
   // jest.doMock で src/db/index を差し替え
   // 以降の require('../src/db/...') は全てこの db を使う
   jest.doMock('../src/db/index', () => db);
@@ -175,6 +183,19 @@ function createCycle(db, pairId, month, dueDay, status = 'pending') {
   return { cycleId, month, dueDate, status };
 }
 
+/**
+ * 当月（resolveCurrentMonth が解決する月）のサイクルを作成する。
+ *
+ * ハンドラ（handlePaid 等）は getOrCreateCurrent で実日付から当月を解決するため、
+ * 固定月（'2026-04' 等）でサイクルを作るとハンドラが別の当月サイクルを新規生成し、
+ * テストが用意したサイクルに触れない。実行日に依存せず当月サイクルを用意する。
+ */
+function createCurrentCycle(db, pair, status = 'pending') {
+  const { resolveCurrentMonth } = require('../src/db/paymentCycles');
+  const month = resolveCurrentMonth(pair.dueDay);
+  return createCycle(db, pair.pairId, month, pair.dueDay, status);
+}
+
 module.exports = {
   setupTestDb,
   teardownTestDb,
@@ -186,4 +207,5 @@ module.exports = {
   createPayer,
   createPair,
   createCycle,
+  createCurrentCycle,
 };

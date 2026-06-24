@@ -25,6 +25,15 @@ const MESSAGES = {
 
   alertDay8Receiver: (amount, dueDate) =>
     `🚨【二次催促】入金未確認\n\n${dueDate}の支払い期日から8日が経過しましたが、振込み報告がありません。\n\n💰 金額：${amount.toLocaleString()}円\n\n法的手続きの検討もご検討ください。`,
+
+  chargeSuccess: (amount, dueDate) =>
+    `✅ カード引き落とし完了\n\n本日（${dueDate}）の養育費 ${amount.toLocaleString()}円 のカード引き落としが完了しました。`,
+
+  chargeNotifyReceiver: (amount, dueDate) =>
+    `✅ 入金確認\n\n${dueDate}の養育費 ${amount.toLocaleString()}円 がカードより引き落とされました。`,
+
+  chargeFailed: (amount, dueDate) =>
+    `⚠️ カード引き落とし失敗\n\n本日（${dueDate}）の養育費 ${amount.toLocaleString()}円 のカード引き落としに失敗しました。\n\n手動での振込みをお願いします。\n\n振込み後は「振込みました」と送信してください。`,
 };
 
 // ─── 日付ユーティリティ ───────────────────────────────────────
@@ -57,9 +66,14 @@ async function runDailyReminders() {
       sent++;
     }
 
-    // 期日当日（未払い）
+    // 期日当日（未払い）: カード登録済みなら自動チャージ、未登録なら通常リマインド
     if (due_date === todayStr && status === 'pending') {
-      await push(payer_line_user_id, MESSAGES.reminderDueDay(amount, due_date));
+      const { payer_stripe_customer_id, payer_stripe_payment_method_id } = cycle;
+      if (payer_stripe_customer_id && payer_stripe_payment_method_id) {
+        await chargeOnDueDate(cycle, payer_stripe_customer_id, payer_stripe_payment_method_id, amount, due_date, payer_line_user_id, receiver_line_user_id);
+      } else {
+        await push(payer_line_user_id, MESSAGES.reminderDueDay(amount, due_date));
+      }
       sent++;
     }
 
@@ -97,7 +111,9 @@ function getAllActiveCycles() {
   return db.prepare(`
     SELECT pc.*, p.amount, p.due_day,
       ru.line_user_id AS receiver_line_user_id,
-      pu.line_user_id AS payer_line_user_id
+      pu.line_user_id AS payer_line_user_id,
+      pu.stripe_customer_id AS payer_stripe_customer_id,
+      pu.stripe_payment_method_id AS payer_stripe_payment_method_id
     FROM payment_cycles pc
     JOIN pairs p ON p.id = pc.pair_id
     JOIN users ru ON ru.id = p.receiver_id
@@ -105,6 +121,21 @@ function getAllActiveCycles() {
     WHERE p.status = 'active'
       AND pc.status IN ('pending', 'overdue')
   `).all();
+}
+
+async function chargeOnDueDate(cycle, customerId, paymentMethodId, amount, dueDate, payerUserId, receiverUserId) {
+  const { chargeCard } = require('../stripe');
+  try {
+    await chargeCard(customerId, paymentMethodId, amount, `養育費 ${dueDate}`);
+    paymentCycles.reportPaid(cycle.id);
+    paymentCycles.confirmReceived(cycle.id);
+    logOperation('stripe.charge.success', { cycleId: cycle.id, dueDate });
+    await push(payerUserId, MESSAGES.chargeSuccess(amount, dueDate));
+    await push(receiverUserId, MESSAGES.chargeNotifyReceiver(amount, dueDate));
+  } catch (err) {
+    logError('stripe.charge.ALERT', err, { cycleId: cycle.id, dueDate });
+    await push(payerUserId, MESSAGES.chargeFailed(amount, dueDate));
+  }
 }
 
 async function push(lineUserId, text) {

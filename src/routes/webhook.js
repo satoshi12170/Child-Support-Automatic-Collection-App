@@ -168,11 +168,29 @@ async function handleTextMessage(event, client) {
   if (text === '受け取りました') return handleReceived(event, client);
   if (text === '状況') return handleStatus(event, client);
   if (text === '履歴') return handleHistory(event, client);
+  if (text === 'カード登録' && user.role === 'payer') return handleCardRegistration(event, client);
 
   return client.replyMessage(event.replyToken, {
     type: 'text',
-    text: '使えるコマンド：\n・「振込みました」\n・「受け取りました」\n・「状況」\n・「履歴」',
+    text: '使えるコマンド：\n・「振込みました」\n・「受け取りました」\n・「状況」\n・「履歴」\n・「カード登録」（支払い担当の方）',
   });
+}
+
+async function handleCardRegistration(event, client) {
+  const { createCheckoutSession } = require('../stripe');
+  try {
+    const { url } = await createCheckoutSession(event.source.userId);
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: `💳 カード登録\n\n以下のURLからクレジットカードを登録してください。\n\n${url}\n\n登録が完了すると、次回の支払い期日から自動で引き落とされます。`,
+    });
+  } catch (err) {
+    logError('stripe.checkout.create', err, { userId: event.source.userId });
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: 'カード登録URLの発行に失敗しました。しばらく時間をおいて再度お試しください。',
+    });
+  }
 }
 
 module.exports = { router, client, handleTextMessage };
